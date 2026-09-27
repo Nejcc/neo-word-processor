@@ -4383,6 +4383,7 @@ function buildTxt(data) {
 
 function buildMd(data) {
   const d = data || bookExportData();
+  const mdMeta = (s) => String(s || '').replace(/([\\`*_{}\[\]()#+.!|>-])/g, '\\$1');
   // wrap a run in emphasis markers, keeping boundary spaces outside them
   const mdRun = (r) => {
     let t = r.text.replace(/([\\*_`])/g, '\\$1');
@@ -4393,11 +4394,11 @@ function buildMd(data) {
     const core = t.slice(lead.length, t.length - trail.length);
     return core ? lead + mark + core + mark + trail : t;
   };
-  let out = `# ${d.title}\n\n`;
-  if (d.subtitle) out += `*${d.subtitle}*\n\n`;
-  out += `**by ${d.author}**\n\n`;
+  let out = `# ${mdMeta(d.title)}\n\n`;
+  if (d.subtitle) out += `*${mdMeta(d.subtitle)}*\n\n`;
+  out += `**by ${mdMeta(d.author)}**\n\n`;
   for (const ch of d.sections) {
-    if (ch.heading) out += `\n## ${ch.heading}\n\n`;
+    if (ch.heading) out += `\n## ${mdMeta(ch.heading)}\n\n`;
     for (const p of ch.paras) {
       out += p.sceneBreak ? '\n***\n\n' : (p.poetry ? '> ' : '') + p.runs.map(mdRun).join('') + '\n\n';
     }
@@ -4430,12 +4431,12 @@ function buildHtml(data, opts = {}) {
     }).join('\n');
     return `
     <section class="chapter">
-      ${ch.heading ? `<h2>${ch.heading}</h2>` : ''}
+      ${ch.heading ? `<h2>${escHtml(ch.heading)}</h2>` : ''}
       ${paras}
     </section>`;
   }).join('\n');
   return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${d.title}</title>
+<html><head><meta charset="utf-8"><title>${escHtml(d.title)}</title>
 <style>
   body { font-family: Georgia, serif; color: #1c1c1c; max-width: 620px; margin: 40px auto; line-height: 1.7; font-size: 13pt; }
   .coverpage { text-align: center; margin: 0 0 40px; page-break-after: always; }
@@ -4458,9 +4459,9 @@ function buildHtml(data, opts = {}) {
   .prov { margin-top: 80px; text-align: center; color: #999; font-size: 9pt; }
 </style></head><body>
 ${opts.cover ? `<div class="coverpage"><img src="data:${opts.cover.mime};base64,${opts.cover.base64}" alt="Cover"/></div>` : ''}
-<div class="titlepage"><h1>${d.title}</h1>
-${d.subtitle ? `<p class="sub">${d.subtitle}</p>` : ''}
-<p class="auth">${d.author}</p></div>
+<div class="titlepage"><h1>${escHtml(d.title)}</h1>
+${d.subtitle ? `<p class="sub">${escHtml(d.subtitle)}</p>` : ''}
+<p class="auth">${escHtml(d.author)}</p></div>
 ${chaptersHtml}
 ${opts.stamp ? `<p class="prov">${total.toLocaleString()} words · exported from NEO on ${stamp}</p>` : ''}
 </body></html>`;
