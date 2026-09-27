@@ -2008,6 +2008,8 @@ function newChapter() {
 }
 
 async function deleteChapterQuiet(chId) {
+  clearTimeout(saveTimers[chId]);
+  delete saveTimers[chId];
   book.chapterOrder = book.chapterOrder.filter((c) => c !== chId);
   delete chapterHTML[chId];
   delete wordCache[chId];
