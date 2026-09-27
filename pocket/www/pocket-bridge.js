@@ -75,29 +75,20 @@
 
   // Pocket writes the same library files as desktop, so path validation
   // mirrors main.js before any caller-provided ID becomes part of a filename.
-  function assertValid(label, value, validator) {
-    if (!validator(value)) throw new Error('Invalid ' + label);
-    return value;
-  }
-
   function checkedBookDir(bookId) {
-    assertValid('bookId', bookId, NeoCore.validators.bookId);
-    return bookDir(bookId);
+    return bookDir(NeoCore.files.bookDir(bookId));
   }
 
   function chapterPath(bookId, chId) {
-    assertValid('chapterId', chId, NeoCore.validators.chapterId);
-    return p(assertValid('bookId', bookId, NeoCore.validators.bookId), 'chapters', chId + '.html');
+    return p(NeoCore.files.bookDir(bookId), 'chapters', NeoCore.files.chapterHtml(chId));
   }
 
   function auxPath(bookId, name) {
-    assertValid('aux name', name, NeoCore.validators.auxName);
-    return p(assertValid('bookId', bookId, NeoCore.validators.bookId), name + '.html');
+    return p(NeoCore.files.bookDir(bookId), NeoCore.files.auxHtml(name));
   }
 
   function jsonPath(bookId, name) {
-    assertValid('JSON sidecar', name, NeoCore.validators.jsonSidecar);
-    return p(assertValid('bookId', bookId, NeoCore.validators.bookId), name + '.json');
+    return p(NeoCore.files.bookDir(bookId), NeoCore.files.jsonSidecar(name));
   }
 
   // The honest access test: reading a file another app created. An app can
@@ -140,7 +131,7 @@
     },
 
     /* ---------- books ---------- */
-    readBookMeta: (bookId) => readJSONFile(p(assertValid('bookId', bookId, NeoCore.validators.bookId), 'book.json'), null),
+    readBookMeta: (bookId) => readJSONFile(p(NeoCore.files.bookDir(bookId), 'book.json'), null),
     listBooks: async () => {
       const out = [];
       try {
@@ -155,10 +146,10 @@
       return out;
     },
     writeBookMeta: async (bookId, meta) => {
-      assertValid('bookId', bookId, NeoCore.validators.bookId);
+      const safeBookId = NeoCore.files.bookDir(bookId);
       if (!meta || meta.id !== bookId) throw new Error('Book metadata id mismatch');
       meta.modified = new Date().toISOString();
-      await writeJSONFile(p(bookId, 'book.json'), meta);
+      await writeJSONFile(p(safeBookId, 'book.json'), meta);
       return true;
     },
     createBook: async (opts) => {
@@ -203,9 +194,9 @@
     /* ---------- covers: shown if present, managed on the Mac ---------- */
     readCover: async (bookId, fname) => {
       try {
-        if (!NeoCore.validators.coverFile(fname)) return null;
-        const r = await FS().readFile({ path: p(assertValid('bookId', bookId, NeoCore.validators.bookId), fname), directory: DIR });
-        const ext = fname.split('.').pop().toLowerCase();
+        const coverFile = NeoCore.files.cover(fname);
+        const r = await FS().readFile({ path: p(NeoCore.files.bookDir(bookId), coverFile), directory: DIR });
+        const ext = coverFile.split('.').pop().toLowerCase();
         const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
         return { base64: r.data, mime, ext };
       } catch { return null; }

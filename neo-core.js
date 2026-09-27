@@ -80,6 +80,22 @@
     coverExt: (value) => COVER_EXTS.includes(String(value || '').toLowerCase())
   });
 
+  function assertValid(label, value, validator) {
+    if (!validator(value)) throw new Error('Invalid ' + label);
+    return value;
+  }
+
+  // Shared file-name builders stop desktop and Pocket from hand-rolling the
+  // same "validate, then append extension" rules in slightly different ways.
+  // Each runtime still joins paths its own way: Node path.join vs. Capacitor /.
+  const files = Object.freeze({
+    bookDir: (bookId) => assertValid('bookId', bookId, validators.bookId),
+    chapterHtml: (chapterId) => assertValid('chapterId', chapterId, validators.chapterId) + '.html',
+    auxHtml: (name) => assertValid('aux name', name, validators.auxName) + '.html',
+    jsonSidecar: (name) => assertValid('JSON sidecar', name, validators.jsonSidecar) + '.json',
+    cover: (fname) => assertValid('cover file', fname, validators.coverFile)
+  });
+
   return {
     DEFAULT_SHELF_NAME,
     DEFAULT_TAB_NAMES,
@@ -91,6 +107,8 @@
     id,
     defaultLibrary,
     defaultBook,
-    validators
+    validators,
+    assertValid,
+    files
   };
 });

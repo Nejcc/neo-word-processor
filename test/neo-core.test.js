@@ -36,3 +36,17 @@ test('validators accept NEO paths and reject traversal-shaped input', () => {
   assert.equal(NeoCore.validators.coverExt('jpeg'), true);
   assert.equal(NeoCore.validators.coverExt('svg'), false);
 });
+
+test('file helpers validate before returning disk-facing names', () => {
+  assert.equal(NeoCore.files.bookDir('book-my-great-book-mujlu771-5iwlx'), 'book-my-great-book-mujlu771-5iwlx');
+  assert.equal(NeoCore.files.chapterHtml('ch-mujlu771-5iwl'), 'ch-mujlu771-5iwl.html');
+  assert.equal(NeoCore.files.auxHtml('notes'), 'notes.html');
+  assert.equal(NeoCore.files.jsonSidecar('stickies'), 'stickies.json');
+  assert.equal(NeoCore.files.cover('cover-123.webp'), 'cover-123.webp');
+
+  assert.throws(() => NeoCore.files.bookDir('../book-my-great-book'), /Invalid bookId/);
+  assert.throws(() => NeoCore.files.chapterHtml('../ch-bad'), /Invalid chapterId/);
+  assert.throws(() => NeoCore.files.auxHtml('notes/evil'), /Invalid aux name/);
+  assert.throws(() => NeoCore.files.jsonSidecar('art'), /Invalid JSON sidecar/);
+  assert.throws(() => NeoCore.files.cover('../cover-123.jpg'), /Invalid cover file/);
+});

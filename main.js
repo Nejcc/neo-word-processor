@@ -75,31 +75,22 @@ function ensureLibrary() {
   }
 }
 
+// Renderer-supplied IDs become disk paths only after NeoCore validates the
+// filename contract; main.js only decides where those names live on desktop.
 function bookDir(bookId) {
-  requireValid('bookId', bookId, NeoCore.validators.bookId);
-  return path.join(LIBRARY_DIR, bookId);
-}
-
-// Validate renderer-supplied identifiers before composing filesystem paths.
-// The allowlists live in NeoCore so desktop and Pocket enforce one contract.
-function requireValid(label, value, validator) {
-  if (!validator(value)) throw new Error('Invalid ' + label);
-  return value;
+  return path.join(LIBRARY_DIR, NeoCore.files.bookDir(bookId));
 }
 
 function chapterFile(bookId, chapterId) {
-  requireValid('chapterId', chapterId, NeoCore.validators.chapterId);
-  return path.join(bookDir(bookId), 'chapters', chapterId + '.html');
+  return path.join(bookDir(bookId), 'chapters', NeoCore.files.chapterHtml(chapterId));
 }
 
 function auxFile(bookId, name) {
-  requireValid('aux name', name, NeoCore.validators.auxName);
-  return path.join(bookDir(bookId), name + '.html');
+  return path.join(bookDir(bookId), NeoCore.files.auxHtml(name));
 }
 
 function jsonSidecarFile(bookId, name) {
-  requireValid('JSON sidecar', name, NeoCore.validators.jsonSidecar);
-  return path.join(bookDir(bookId), name + '.json');
+  return path.join(bookDir(bookId), NeoCore.files.jsonSidecar(name));
 }
 
 // A human-readable map of the library, regenerated on every change:
@@ -192,7 +183,7 @@ ipcMain.handle('book:readMeta', (_e, bookId) => {
 });
 
 ipcMain.handle('book:writeMeta', (_e, bookId, meta) => {
-  requireValid('bookId', bookId, NeoCore.validators.bookId);
+  NeoCore.files.bookDir(bookId);
   if (!meta || meta.id !== bookId) throw new Error('Book metadata id mismatch');
   meta.modified = new Date().toISOString();
   writeJSON(path.join(bookDir(bookId), 'book.json'), meta);
@@ -212,8 +203,7 @@ ipcMain.handle('chapter:read', (_e, bookId, chapterId) => {
 ipcMain.handle('chapter:write', (_e, bookId, chapterId, html) => {
   const dir = path.join(bookDir(bookId), 'chapters');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  requireValid('chapterId', chapterId, NeoCore.validators.chapterId);
-  fs.writeFileSync(path.join(dir, chapterId + '.html'), html);
+  fs.writeFileSync(path.join(dir, NeoCore.files.chapterHtml(chapterId)), html);
   return true;
 });
 
@@ -320,9 +310,9 @@ ipcMain.handle('cover:remove', (_e, bookId) => {
 
 ipcMain.handle('cover:read', (_e, bookId, fname) => {
   try {
-    if (!NeoCore.validators.coverFile(fname)) return null;
-    const buf = fs.readFileSync(path.join(bookDir(bookId), fname));
-    const ext = path.extname(fname).slice(1);
+    const coverFile = NeoCore.files.cover(fname);
+    const buf = fs.readFileSync(path.join(bookDir(bookId), coverFile));
+    const ext = path.extname(coverFile).slice(1);
     const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
     return { base64: buf.toString('base64'), mime, ext };
   } catch {
