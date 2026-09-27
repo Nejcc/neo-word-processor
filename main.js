@@ -6,6 +6,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, utilityProcess } = 
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const NeoCore = require('./neo-core.js');
 
 // macOS Chromium's "smart delete" also removes whitespace around a deleted
 // selection, and that pass can duplicate characters. Deletes stay literal.
@@ -70,19 +71,33 @@ async function chooseLibraryFolder() {
 function ensureLibrary() {
   if (!fs.existsSync(LIBRARY_DIR)) fs.mkdirSync(LIBRARY_DIR, { recursive: true });
   if (!fs.existsSync(LIBRARY_FILE)) {
-    const seed = {
-      authorName: '',
-      penNames: [],
-      firstRunDone: false,
-      pageTheme: 'night',
-      shelves: [{ id: 'shelf-1', name: 'Works in Progress', bookIds: [] }]
-    };
-    fs.writeFileSync(LIBRARY_FILE, JSON.stringify(seed, null, 2));
+    fs.writeFileSync(LIBRARY_FILE, JSON.stringify(NeoCore.defaultLibrary(), null, 2));
   }
 }
 
 function bookDir(bookId) {
+  requireValid('bookId', bookId, NeoCore.validators.bookId);
   return path.join(LIBRARY_DIR, bookId);
+}
+
+function requireValid(label, value, validator) {
+  if (!validator(value)) throw new Error('Invalid ' + label);
+  return value;
+}
+
+function chapterFile(bookId, chapterId) {
+  requireValid('chapterId', chapterId, NeoCore.validators.chapterId);
+  return path.join(bookDir(bookId), 'chapters', chapterId + '.html');
+}
+
+function auxFile(bookId, name) {
+  requireValid('aux name', name, NeoCore.validators.auxName);
+  return path.join(bookDir(bookId), name + '.html');
+}
+
+function jsonSidecarFile(bookId, name) {
+  requireValid('JSON sidecar', name, NeoCore.validators.jsonSidecar);
+  return path.join(bookDir(bookId), name + '.json');
 }
 
 // A human-readable map of the library, regenerated on every change:
@@ -146,26 +161,9 @@ ipcMain.handle('library:write', (_e, data) => {
 // A book is a folder: book.json + chapters/*.html + notes.html + outline.html + darlings.json
 ipcMain.handle('book:create', (_e, meta) => {
   ensureLibrary();
-  // folders carry a slug of the title when it's known at creation (imports),
-  // so the library reads like a bookshelf in Finder too
-  const slug = String(meta.title || '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
-  const id = 'book-' + (slug ? slug + '-' : '') +
-    Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
-  const dir = bookDir(id);
+  const book = NeoCore.defaultBook({ ...(meta || {}), id: undefined });
+  const dir = bookDir(book.id);
   fs.mkdirSync(path.join(dir, 'chapters'), { recursive: true });
-  const book = {
-    id,
-    title: meta.title || 'Untitled',
-    subtitle: '',
-    series: '',
-    author: meta.author || 'Anonymous',
-    wordGoal: 0,
-    created: new Date().toISOString(),
-    modified: new Date().toISOString(),
-    chapterOrder: [],
-    tabNames: { notes: 'Notes', outline: 'Outline' }
-  };
   writeJSON(path.join(dir, 'book.json'), book);
   fs.writeFileSync(path.join(dir, 'notes.html'), '');
   fs.writeFileSync(path.join(dir, 'outline.html'), '');
@@ -174,11 +172,26 @@ ipcMain.handle('book:create', (_e, meta) => {
   return book;
 });
 
+// every book folder in the library, shelved or not — for File → Reshelve
+ipcMain.handle('library:listBooks', () => {
+  const out = [];
+  try {
+    for (const d of fs.readdirSync(LIBRARY_DIR)) {
+      if (!d.startsWith('book-')) continue;
+      const m = readJSON(path.join(LIBRARY_DIR, d, 'book.json'), null);
+      if (m && m.id) out.push({ id: m.id, title: m.title || 'Untitled', author: m.author || '', modified: m.modified || '' });
+    }
+  } catch (err) { logError('listBooks', err); }
+  return out;
+});
+
 ipcMain.handle('book:readMeta', (_e, bookId) => {
   return readJSON(path.join(bookDir(bookId), 'book.json'), null);
 });
 
 ipcMain.handle('book:writeMeta', (_e, bookId, meta) => {
+  requireValid('bookId', bookId, NeoCore.validators.bookId);
+  if (!meta || meta.id !== bookId) throw new Error('Book metadata id mismatch');
   meta.modified = new Date().toISOString();
   writeJSON(path.join(bookDir(bookId), 'book.json'), meta);
   writeCatalog();
@@ -186,7 +199,7 @@ ipcMain.handle('book:writeMeta', (_e, bookId, meta) => {
 });
 
 ipcMain.handle('chapter:read', (_e, bookId, chapterId) => {
-  const file = path.join(bookDir(bookId), 'chapters', chapterId + '.html');
+  const file = chapterFile(bookId, chapterId);
   try {
     return fs.readFileSync(file, 'utf8');
   } catch {
@@ -197,19 +210,19 @@ ipcMain.handle('chapter:read', (_e, bookId, chapterId) => {
 ipcMain.handle('chapter:write', (_e, bookId, chapterId, html) => {
   const dir = path.join(bookDir(bookId), 'chapters');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  requireValid('chapterId', chapterId, NeoCore.validators.chapterId);
   fs.writeFileSync(path.join(dir, chapterId + '.html'), html);
   return true;
 });
 
 ipcMain.handle('chapter:delete', (_e, bookId, chapterId) => {
-  const file = path.join(bookDir(bookId), 'chapters', chapterId + '.html');
+  const file = chapterFile(bookId, chapterId);
   if (fs.existsSync(file)) fs.unlinkSync(file);
   return true;
 });
 
 ipcMain.handle('aux:read', (_e, bookId, name) => {
-  // name: 'notes' | 'outline'
-  const file = path.join(bookDir(bookId), name + '.html');
+  const file = auxFile(bookId, name);
   try {
     return fs.readFileSync(file, 'utf8');
   } catch {
@@ -218,16 +231,16 @@ ipcMain.handle('aux:read', (_e, bookId, name) => {
 });
 
 ipcMain.handle('aux:write', (_e, bookId, name, html) => {
-  fs.writeFileSync(path.join(bookDir(bookId), name + '.html'), html);
+  fs.writeFileSync(auxFile(bookId, name), html);
   return true;
 });
 
 ipcMain.handle('json:read', (_e, bookId, name, fallback) => {
-  return readJSON(path.join(bookDir(bookId), name + '.json'), fallback);
+  return readJSON(jsonSidecarFile(bookId, name), fallback);
 });
 
 ipcMain.handle('json:write', (_e, bookId, name, data) => {
-  writeJSON(path.join(bookDir(bookId), name + '.json'), data);
+  writeJSON(jsonSidecarFile(bookId, name), data);
   return true;
 });
 
@@ -266,7 +279,7 @@ ipcMain.handle('book:delete', async (_e, bookId, title) => {
 // the library. Timestamped filenames sidestep every caching gremlin.
 // ---------------------------------------------------------------------------
 
-const COVER_EXTS = ['png', 'jpg', 'jpeg', 'webp'];
+const COVER_EXTS = NeoCore.COVER_EXTS;
 
 ipcMain.handle('library:path', () => LIBRARY_DIR);
 
@@ -288,7 +301,7 @@ function clearCovers(dir) {
 
 ipcMain.handle('cover:set', (_e, bookId, srcPath) => {
   const ext = path.extname(srcPath).toLowerCase().replace('.', '');
-  if (!COVER_EXTS.includes(ext)) return null;
+  if (!NeoCore.validators.coverExt(ext)) return null;
   const dir = bookDir(bookId);
   if (!fs.existsSync(dir)) return null;
   clearCovers(dir);
@@ -305,7 +318,7 @@ ipcMain.handle('cover:remove', (_e, bookId) => {
 
 ipcMain.handle('cover:read', (_e, bookId, fname) => {
   try {
-    if (!/^(cover|art)-\d+\.(png|jpg|webp)$/.test(fname)) return null;
+    if (!NeoCore.validators.coverFile(fname)) return null;
     const buf = fs.readFileSync(path.join(bookDir(bookId), fname));
     const ext = path.extname(fname).slice(1);
     const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
@@ -767,8 +780,10 @@ async function dailyBackup() {
 // ---------------------------------------------------------------------------
 // Window
 // ---------------------------------------------------------------------------
+let mainWindow = null;
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -785,11 +800,12 @@ function createWindow() {
       spellcheck: true
     }
   });
-  win.loadFile('index.html');
+  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.loadFile('index.html');
 
   // NEO does its own spellchecking (see spell:* handlers) — the engine's
   // checker proved unreliable at scanning existing text, so it stays off
-  win.webContents.session.setSpellCheckerEnabled(false);
+  mainWindow.webContents.session.setSpellCheckerEnabled(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -898,12 +914,20 @@ function sendToWindow(msg) {
   if (w) w.webContents.send('menu', msg);
 }
 
-// whether the caret is in a poetry paragraph — the Format menu's tick
+// the Format menu's ticks: whether the caret is in a poetry paragraph, and
+// whether typewriter scrolling is on
 let poetryState = false;
+let typewriterState = false;
 ipcMain.on('poetry:state', (_e, on) => {
   on = !!on;
   if (on === poetryState) return;
   poetryState = on;
+  try { buildMenu(); } catch (err) { logError('menu', err); }
+});
+ipcMain.on('typewriter:state', (_e, on) => {
+  on = !!on;
+  if (on === typewriterState) return;
+  typewriterState = on;
   try { buildMenu(); } catch (err) { logError('menu', err); }
 });
 
@@ -955,6 +979,7 @@ function buildMenu() {
           accelerator: 'CmdOrCtrl+Shift+I',
           click: () => sendToWindow({ type: 'import' })
         },
+        { label: 'Reshelve a Book…', click: () => sendToWindow({ type: 'reshelve' }) },
         { label: 'Library Folder…', click: () => { chooseLibraryFolder().catch((err) => logError('library folder', err)); } },
         { type: 'separator' },
         ...(isMac ? [{ role: 'close' }] : [{ role: 'quit' }])
@@ -1014,20 +1039,22 @@ function buildMenu() {
         {
           label: 'Align Paragraph',
           submenu: [
-            { label: 'Left', click: () => sendToWindow({ type: 'align', value: 'left' }) },
-            { label: 'Center', click: () => sendToWindow({ type: 'align', value: 'center' }) },
-            { label: 'Right', click: () => sendToWindow({ type: 'align', value: 'right' }) },
-            { label: 'Justify', click: () => sendToWindow({ type: 'align', value: 'justify' }) }
+            { label: 'Left', accelerator: 'CmdOrCtrl+Shift+L', click: () => sendToWindow({ type: 'align', value: 'left' }) },
+            { label: 'Center', accelerator: 'CmdOrCtrl+Shift+C', click: () => sendToWindow({ type: 'align', value: 'center' }) },
+            { label: 'Right', accelerator: 'CmdOrCtrl+Shift+R', click: () => sendToWindow({ type: 'align', value: 'right' }) },
+            { label: 'Justify', accelerator: 'CmdOrCtrl+Shift+J', click: () => sendToWindow({ type: 'align', value: 'justify' }) }
           ]
         },
         { type: 'separator' },
-        { label: 'Larger Text', accelerator: 'CmdOrCtrl+=', click: () => sendToWindow({ type: 'fontSize', value: 1 }) },
-        { label: 'Smaller Text', accelerator: 'CmdOrCtrl+-', click: () => sendToWindow({ type: 'fontSize', value: -1 }) },
+        { label: 'Larger Text', accelerator: 'CmdOrCtrl-Plus', click: () => sendToWindow({ type: 'fontSize', value: 1 }) },
+        { label: 'Smaller Text', accelerator: 'CmdOrCtrl-Minus', click: () => sendToWindow({ type: 'fontSize', value: -1 }) },
         { label: 'Reset Text Size', accelerator: 'CmdOrCtrl+0', click: () => sendToWindow({ type: 'fontSize', value: 0 }) },
         { type: 'separator' },
         {
           label: 'Typewriter Scrolling',
           accelerator: 'CmdOrCtrl+Shift+T',
+          type: 'checkbox',
+          checked: typewriterState,
           click: () => sendToWindow({ type: 'typewriter' })
         },
         { type: 'separator' },
@@ -1051,6 +1078,16 @@ function buildMenu() {
             const w = BrowserWindow.getFocusedWindow();
             if (w) w.setFullScreen(!w.isFullScreen());
           }
+        },
+        {
+          label: 'Focus Mode',
+          submenu: [
+            { label: 'Cycle', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendToWindow({ type: 'focusCycle' }) },
+            { type: 'separator' },
+            { label: 'Sentence', click: () => sendToWindow({ type: 'focus', value: 'sentence' }) },
+            { label: 'Paragraph', click: () => sendToWindow({ type: 'focus', value: 'paragraph' }) },
+            { label: 'Off', click: () => sendToWindow({ type: 'focus', value: 'off' }) }
+          ]
         },
         { type: 'separator' },
         {
