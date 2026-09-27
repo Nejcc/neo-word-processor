@@ -172,6 +172,19 @@ ipcMain.handle('book:create', (_e, meta) => {
   return book;
 });
 
+// every book folder in the library, shelved or not — for File → Reshelve
+ipcMain.handle('library:listBooks', () => {
+  const out = [];
+  try {
+    for (const d of fs.readdirSync(LIBRARY_DIR)) {
+      if (!d.startsWith('book-')) continue;
+      const m = readJSON(path.join(LIBRARY_DIR, d, 'book.json'), null);
+      if (m && m.id) out.push({ id: m.id, title: m.title || 'Untitled', author: m.author || '', modified: m.modified || '' });
+    }
+  } catch (err) { logError('listBooks', err); }
+  return out;
+});
+
 ipcMain.handle('book:readMeta', (_e, bookId) => {
   return readJSON(path.join(bookDir(bookId), 'book.json'), null);
 });
@@ -901,12 +914,20 @@ function sendToWindow(msg) {
   if (w) w.webContents.send('menu', msg);
 }
 
-// whether the caret is in a poetry paragraph — the Format menu's tick
+// the Format menu's ticks: whether the caret is in a poetry paragraph, and
+// whether typewriter scrolling is on
 let poetryState = false;
+let typewriterState = false;
 ipcMain.on('poetry:state', (_e, on) => {
   on = !!on;
   if (on === poetryState) return;
   poetryState = on;
+  try { buildMenu(); } catch (err) { logError('menu', err); }
+});
+ipcMain.on('typewriter:state', (_e, on) => {
+  on = !!on;
+  if (on === typewriterState) return;
+  typewriterState = on;
   try { buildMenu(); } catch (err) { logError('menu', err); }
 });
 
@@ -958,6 +979,7 @@ function buildMenu() {
           accelerator: 'CmdOrCtrl+Shift+I',
           click: () => sendToWindow({ type: 'import' })
         },
+        { label: 'Reshelve a Book…', click: () => sendToWindow({ type: 'reshelve' }) },
         { label: 'Library Folder…', click: () => { chooseLibraryFolder().catch((err) => logError('library folder', err)); } },
         { type: 'separator' },
         ...(isMac ? [{ role: 'close' }] : [{ role: 'quit' }])
@@ -1017,20 +1039,22 @@ function buildMenu() {
         {
           label: 'Align Paragraph',
           submenu: [
-            { label: 'Left', click: () => sendToWindow({ type: 'align', value: 'left' }) },
-            { label: 'Center', click: () => sendToWindow({ type: 'align', value: 'center' }) },
-            { label: 'Right', click: () => sendToWindow({ type: 'align', value: 'right' }) },
-            { label: 'Justify', click: () => sendToWindow({ type: 'align', value: 'justify' }) }
+            { label: 'Left', accelerator: 'CmdOrCtrl+Shift+L', click: () => sendToWindow({ type: 'align', value: 'left' }) },
+            { label: 'Center', accelerator: 'CmdOrCtrl+Shift+C', click: () => sendToWindow({ type: 'align', value: 'center' }) },
+            { label: 'Right', accelerator: 'CmdOrCtrl+Shift+R', click: () => sendToWindow({ type: 'align', value: 'right' }) },
+            { label: 'Justify', accelerator: 'CmdOrCtrl+Shift+J', click: () => sendToWindow({ type: 'align', value: 'justify' }) }
           ]
         },
         { type: 'separator' },
-        { label: 'Larger Text', accelerator: 'CmdOrCtrl+=', click: () => sendToWindow({ type: 'fontSize', value: 1 }) },
-        { label: 'Smaller Text', accelerator: 'CmdOrCtrl+-', click: () => sendToWindow({ type: 'fontSize', value: -1 }) },
+        { label: 'Larger Text', accelerator: 'CmdOrCtrl-Plus', click: () => sendToWindow({ type: 'fontSize', value: 1 }) },
+        { label: 'Smaller Text', accelerator: 'CmdOrCtrl-Minus', click: () => sendToWindow({ type: 'fontSize', value: -1 }) },
         { label: 'Reset Text Size', accelerator: 'CmdOrCtrl+0', click: () => sendToWindow({ type: 'fontSize', value: 0 }) },
         { type: 'separator' },
         {
           label: 'Typewriter Scrolling',
           accelerator: 'CmdOrCtrl+Shift+T',
+          type: 'checkbox',
+          checked: typewriterState,
           click: () => sendToWindow({ type: 'typewriter' })
         },
         { type: 'separator' },
@@ -1054,6 +1078,16 @@ function buildMenu() {
             const w = BrowserWindow.getFocusedWindow();
             if (w) w.setFullScreen(!w.isFullScreen());
           }
+        },
+        {
+          label: 'Focus Mode',
+          submenu: [
+            { label: 'Cycle', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendToWindow({ type: 'focusCycle' }) },
+            { type: 'separator' },
+            { label: 'Sentence', click: () => sendToWindow({ type: 'focus', value: 'sentence' }) },
+            { label: 'Paragraph', click: () => sendToWindow({ type: 'focus', value: 'paragraph' }) },
+            { label: 'Off', click: () => sendToWindow({ type: 'focus', value: 'off' }) }
+          ]
         },
         { type: 'separator' },
         {

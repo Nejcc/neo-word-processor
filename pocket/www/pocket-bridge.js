@@ -139,6 +139,19 @@
 
     /* ---------- books ---------- */
     readBookMeta: (bookId) => readJSONFile(p(assertValid('bookId', bookId, NeoCore.validators.bookId), 'book.json'), null),
+    listBooks: async () => {
+      const out = [];
+      try {
+        const ls = await FS().readdir({ path: ROOT, directory: DIR });
+        for (const f of ls.files || []) {
+          const name = (f && f.name) || f;
+          if (!NeoCore.validators.bookId(name)) continue;
+          const m = await readJSONFile(p(name, 'book.json'), null);
+          if (m && m.id) out.push({ id: m.id, title: m.title || 'Untitled', author: m.author || '', modified: m.modified || '' });
+        }
+      } catch { /* an empty list is honest enough */ }
+      return out;
+    },
     writeBookMeta: async (bookId, meta) => {
       assertValid('bookId', bookId, NeoCore.validators.bookId);
       if (!meta || meta.id !== bookId) throw new Error('Book metadata id mismatch');
@@ -224,7 +237,8 @@
       showErrorDetail(msg);
     },
     onMenu: () => { /* no menu bar in your pocket */ },
-    poetryState: () => { /* no Format menu to tick */ }
+    poetryState: () => { /* no Format menu to tick */ },
+    typewriterState: () => { /* likewise */ }
   };
 
   // Pocket is written on a real keyboard, so Android's on-screen one stays
