@@ -82,7 +82,42 @@ function ensureLibrary() {
 }
 
 function bookDir(bookId) {
-  return path.join(LIBRARY_DIR, bookId);
+  assertSafeId(bookId, /^book-[a-z0-9-]+$/);
+  return safeJoin(LIBRARY_DIR, bookId);
+}
+
+function assertSafeId(value, pattern) {
+  if (typeof value !== 'string' || !pattern.test(value)) {
+    throw new Error('Unsafe library identifier');
+  }
+}
+
+function safeJoin(root, ...parts) {
+  const resolvedRoot = path.resolve(root);
+  const target = path.resolve(resolvedRoot, ...parts);
+  const rel = path.relative(resolvedRoot, target);
+  if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) return target;
+  throw new Error('Path escaped the NEO library');
+}
+
+function chapterFile(bookId, chapterId) {
+  assertSafeId(chapterId, /^ch-[a-z0-9-]+$/);
+  return safeJoin(bookDir(bookId), 'chapters', chapterId + '.html');
+}
+
+function auxFile(bookId, name) {
+  if (!['notes', 'outline'].includes(name)) throw new Error('Unknown auxiliary file');
+  return safeJoin(bookDir(bookId), name + '.html');
+}
+
+function jsonFile(bookId, name) {
+  if (!['darlings', 'stickies', 'art'].includes(name)) throw new Error('Unknown JSON file');
+  return safeJoin(bookDir(bookId), name + '.json');
+}
+
+function coverFile(bookId, fname) {
+  if (!/^(cover|art)-\d+\.(png|jpg|webp)$/.test(fname)) return null;
+  return safeJoin(bookDir(bookId), fname);
 }
 
 // A human-readable map of the library, regenerated on every change:
@@ -175,18 +210,18 @@ ipcMain.handle('book:create', (_e, meta) => {
 });
 
 ipcMain.handle('book:readMeta', (_e, bookId) => {
-  return readJSON(path.join(bookDir(bookId), 'book.json'), null);
+  return readJSON(safeJoin(bookDir(bookId), 'book.json'), null);
 });
 
 ipcMain.handle('book:writeMeta', (_e, bookId, meta) => {
   meta.modified = new Date().toISOString();
-  writeJSON(path.join(bookDir(bookId), 'book.json'), meta);
+  writeJSON(safeJoin(bookDir(bookId), 'book.json'), meta);
   writeCatalog();
   return true;
 });
 
 ipcMain.handle('chapter:read', (_e, bookId, chapterId) => {
-  const file = path.join(bookDir(bookId), 'chapters', chapterId + '.html');
+  const file = chapterFile(bookId, chapterId);
   try {
     return fs.readFileSync(file, 'utf8');
   } catch {
@@ -195,21 +230,22 @@ ipcMain.handle('chapter:read', (_e, bookId, chapterId) => {
 });
 
 ipcMain.handle('chapter:write', (_e, bookId, chapterId, html) => {
-  const dir = path.join(bookDir(bookId), 'chapters');
+  const file = chapterFile(bookId, chapterId);
+  const dir = path.dirname(file);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, chapterId + '.html'), html);
+  fs.writeFileSync(file, html);
   return true;
 });
 
 ipcMain.handle('chapter:delete', (_e, bookId, chapterId) => {
-  const file = path.join(bookDir(bookId), 'chapters', chapterId + '.html');
+  const file = chapterFile(bookId, chapterId);
   if (fs.existsSync(file)) fs.unlinkSync(file);
   return true;
 });
 
 ipcMain.handle('aux:read', (_e, bookId, name) => {
   // name: 'notes' | 'outline'
-  const file = path.join(bookDir(bookId), name + '.html');
+  const file = auxFile(bookId, name);
   try {
     return fs.readFileSync(file, 'utf8');
   } catch {
@@ -218,16 +254,16 @@ ipcMain.handle('aux:read', (_e, bookId, name) => {
 });
 
 ipcMain.handle('aux:write', (_e, bookId, name, html) => {
-  fs.writeFileSync(path.join(bookDir(bookId), name + '.html'), html);
+  fs.writeFileSync(auxFile(bookId, name), html);
   return true;
 });
 
 ipcMain.handle('json:read', (_e, bookId, name, fallback) => {
-  return readJSON(path.join(bookDir(bookId), name + '.json'), fallback);
+  return readJSON(jsonFile(bookId, name), fallback);
 });
 
 ipcMain.handle('json:write', (_e, bookId, name, data) => {
-  writeJSON(path.join(bookDir(bookId), name + '.json'), data);
+  writeJSON(jsonFile(bookId, name), data);
   return true;
 });
 
@@ -305,8 +341,9 @@ ipcMain.handle('cover:remove', (_e, bookId) => {
 
 ipcMain.handle('cover:read', (_e, bookId, fname) => {
   try {
-    if (!/^(cover|art)-\d+\.(png|jpg|webp)$/.test(fname)) return null;
-    const buf = fs.readFileSync(path.join(bookDir(bookId), fname));
+    const file = coverFile(bookId, fname);
+    if (!file) return null;
+    const buf = fs.readFileSync(file);
     const ext = path.extname(fname).slice(1);
     const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
     return { base64: buf.toString('base64'), mime, ext };
