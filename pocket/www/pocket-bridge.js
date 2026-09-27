@@ -121,6 +121,19 @@
 
     /* ---------- books ---------- */
     readBookMeta: (bookId) => readJSONFile(p(bookId, 'book.json'), null),
+    listBooks: async () => {
+      const out = [];
+      try {
+        const ls = await FS().readdir({ path: ROOT, directory: DIR });
+        for (const f of ls.files || []) {
+          const name = (f && f.name) || f;
+          if (!String(name).startsWith('book-')) continue;
+          const m = await readJSONFile(p(name, 'book.json'), null);
+          if (m && m.id) out.push({ id: m.id, title: m.title || 'Untitled', author: m.author || '', modified: m.modified || '' });
+        }
+      } catch { /* an empty list is honest enough */ }
+      return out;
+    },
     writeBookMeta: async (bookId, meta) => {
       meta.modified = new Date().toISOString();
       await writeJSONFile(p(bookId, 'book.json'), meta);
@@ -215,7 +228,8 @@
       showErrorDetail(msg);
     },
     onMenu: () => { /* no menu bar in your pocket */ },
-    poetryState: () => { /* no Format menu to tick */ }
+    poetryState: () => { /* no Format menu to tick */ },
+    typewriterState: () => { /* likewise */ }
   };
 
   // Pocket is written on a real keyboard, so Android's on-screen one stays
