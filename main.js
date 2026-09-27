@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const NeoCore = require('./neo-core.js');
+const { createLibraryStore } = require('./src/main/library-store.js');
 
 // macOS Chromium's "smart delete" also removes whitespace around a deleted
 // selection, and that pass can duplicate characters. Deletes stay literal.
@@ -18,7 +19,10 @@ app.commandLine.appendSwitch('blink-settings', 'smartInsertDeleteEnabled=false')
 // Resolved properly at startup via app.getPath('documents') — this default
 // covers any early access and non-redirected setups.
 let LIBRARY_DIR = path.join(os.homedir(), 'Documents', 'NEO Library');
-let LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
+const libraryStore = createLibraryStore({
+  libraryDir: LIBRARY_DIR,
+  onError: (source, err) => logError(source, err)
+});
 
 // NEO's few app-level settings (today: a custom library folder) live in the
 // system's per-app data folder, since they must exist before the library
@@ -68,59 +72,6 @@ async function chooseLibraryFolder() {
   app.exit(0);
 }
 
-function ensureLibrary() {
-  if (!fs.existsSync(LIBRARY_DIR)) fs.mkdirSync(LIBRARY_DIR, { recursive: true });
-  if (!fs.existsSync(LIBRARY_FILE)) {
-    fs.writeFileSync(LIBRARY_FILE, JSON.stringify(NeoCore.defaultLibrary(), null, 2));
-  }
-}
-
-// Renderer-supplied IDs become disk paths only after NeoCore validates the
-// filename contract; main.js only decides where those names live on desktop.
-function bookDir(bookId) {
-  return path.join(LIBRARY_DIR, NeoCore.files.bookDir(bookId));
-}
-
-function chapterFile(bookId, chapterId) {
-  return path.join(bookDir(bookId), 'chapters', NeoCore.files.chapterHtml(chapterId));
-}
-
-function auxFile(bookId, name) {
-  return path.join(bookDir(bookId), NeoCore.files.auxHtml(name));
-}
-
-function jsonSidecarFile(bookId, name) {
-  return path.join(bookDir(bookId), NeoCore.files.jsonSidecar(name));
-}
-
-// A human-readable map of the library, regenerated on every change:
-// which folder is which book, and what shelf it lives on. Sorts to the
-// top of the folder so browsing writers can always find their way.
-function writeCatalog() {
-  try {
-    const lib = readJSON(LIBRARY_FILE, { shelves: [] });
-    const onShelf = {};
-    for (const s of lib.shelves || []) {
-      for (const id of s.bookIds) onShelf[id] = s.name;
-    }
-    const lines = [];
-    for (const d of fs.readdirSync(LIBRARY_DIR)) {
-      if (!d.startsWith('book-')) continue;
-      try {
-        const m = JSON.parse(fs.readFileSync(path.join(LIBRARY_DIR, d, 'book.json'), 'utf8'));
-        lines.push(`${m.title || 'Untitled'}  —  ${d}  —  shelf: ${onShelf[m.id] || '(none — removed from shelves)'}`);
-      } catch { /* not a valid book folder */ }
-    }
-    lines.sort((a, b) => a.localeCompare(b));
-    fs.writeFileSync(path.join(LIBRARY_DIR, '_catalog.txt'),
-      'NEO LIBRARY CATALOG — which folder is which book\n' +
-      '(regenerated automatically; edits here do nothing)\n\n' +
-      lines.join('\n') + '\n');
-  } catch (err) {
-    logError('catalog', err);
-  }
-}
-
 function readJSON(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -140,100 +91,57 @@ function writeJSON(file, data) {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle('library:read', () => {
-  ensureLibrary();
-  return readJSON(LIBRARY_FILE, null);
+  return libraryStore.readLibrary();
 });
 
 ipcMain.handle('library:write', (_e, data) => {
-  ensureLibrary();
-  writeJSON(LIBRARY_FILE, data);
-  writeCatalog();
-  return true;
+  return libraryStore.writeLibrary(data);
 });
 
 // A book is a folder: book.json + chapters/*.html + notes.html + outline.html + darlings.json
 ipcMain.handle('book:create', (_e, meta) => {
-  ensureLibrary();
-  const book = NeoCore.defaultBook({ ...(meta || {}), id: undefined });
-  const dir = bookDir(book.id);
-  fs.mkdirSync(path.join(dir, 'chapters'), { recursive: true });
-  writeJSON(path.join(dir, 'book.json'), book);
-  fs.writeFileSync(path.join(dir, 'notes.html'), '');
-  fs.writeFileSync(path.join(dir, 'outline.html'), '');
-  writeJSON(path.join(dir, 'darlings.json'), []);
-  writeJSON(path.join(dir, 'stickies.json'), []);
-  return book;
+  return libraryStore.createBook(meta);
 });
 
 // every book folder in the library, shelved or not — for File → Reshelve
 ipcMain.handle('library:listBooks', () => {
-  const out = [];
-  try {
-    for (const d of fs.readdirSync(LIBRARY_DIR)) {
-      if (!d.startsWith('book-')) continue;
-      const m = readJSON(path.join(LIBRARY_DIR, d, 'book.json'), null);
-      if (m && m.id) out.push({ id: m.id, title: m.title || 'Untitled', author: m.author || '', modified: m.modified || '' });
-    }
-  } catch (err) { logError('listBooks', err); }
-  return out;
+  return libraryStore.listBooks();
 });
 
 ipcMain.handle('book:readMeta', (_e, bookId) => {
-  return readJSON(path.join(bookDir(bookId), 'book.json'), null);
+  return libraryStore.readBookMeta(bookId);
 });
 
 ipcMain.handle('book:writeMeta', (_e, bookId, meta) => {
-  NeoCore.files.bookDir(bookId);
-  if (!meta || meta.id !== bookId) throw new Error('Book metadata id mismatch');
-  meta.modified = new Date().toISOString();
-  writeJSON(path.join(bookDir(bookId), 'book.json'), meta);
-  writeCatalog();
-  return true;
+  return libraryStore.writeBookMeta(bookId, meta);
 });
 
 ipcMain.handle('chapter:read', (_e, bookId, chapterId) => {
-  const file = chapterFile(bookId, chapterId);
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
+  return libraryStore.readChapter(bookId, chapterId);
 });
 
 ipcMain.handle('chapter:write', (_e, bookId, chapterId, html) => {
-  const dir = path.join(bookDir(bookId), 'chapters');
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, NeoCore.files.chapterHtml(chapterId)), html);
-  return true;
+  return libraryStore.writeChapter(bookId, chapterId, html);
 });
 
 ipcMain.handle('chapter:delete', (_e, bookId, chapterId) => {
-  const file = chapterFile(bookId, chapterId);
-  if (fs.existsSync(file)) fs.unlinkSync(file);
-  return true;
+  return libraryStore.deleteChapter(bookId, chapterId);
 });
 
 ipcMain.handle('aux:read', (_e, bookId, name) => {
-  const file = auxFile(bookId, name);
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
+  return libraryStore.readAux(bookId, name);
 });
 
 ipcMain.handle('aux:write', (_e, bookId, name, html) => {
-  fs.writeFileSync(auxFile(bookId, name), html);
-  return true;
+  return libraryStore.writeAux(bookId, name, html);
 });
 
 ipcMain.handle('json:read', (_e, bookId, name, fallback) => {
-  return readJSON(jsonSidecarFile(bookId, name), fallback);
+  return libraryStore.readSidecar(bookId, name, fallback);
 });
 
 ipcMain.handle('json:write', (_e, bookId, name, data) => {
-  writeJSON(jsonSidecarFile(bookId, name), data);
-  return true;
+  return libraryStore.writeSidecar(bookId, name, data);
 });
 
 ipcMain.handle('book:delete', async (_e, bookId, title) => {
@@ -249,13 +157,13 @@ ipcMain.handle('book:delete', async (_e, bookId, title) => {
   if (response === 1) {
     const { shell } = require('electron');
     try {
-      await shell.trashItem(bookDir(bookId));
+      await shell.trashItem(libraryStore.bookDir(bookId));
       return true;
     } catch (err) {
       // Some filesystems have no Trash (network mounts, odd drives).
       // Words are never lost: leave the book alone and show the writer where it lives.
       logError('trash', err);
-      shell.showItemInFolder(bookDir(bookId));
+      shell.showItemInFolder(libraryStore.bookDir(bookId));
       dialog.showMessageBox(win, {
         message: 'NEO couldn’t move that folder to the Trash.',
         detail: 'The book is untouched. Its folder is highlighted so you can deal with it yourself.'
@@ -294,7 +202,7 @@ function clearCovers(dir) {
 ipcMain.handle('cover:set', (_e, bookId, srcPath) => {
   const ext = path.extname(srcPath).toLowerCase().replace('.', '');
   if (!NeoCore.validators.coverExt(ext)) return null;
-  const dir = bookDir(bookId);
+  const dir = libraryStore.bookDir(bookId);
   if (!fs.existsSync(dir)) return null;
   clearCovers(dir);
   const fname = 'cover-' + Date.now() + '.' + (ext === 'jpeg' ? 'jpg' : ext);
@@ -303,7 +211,7 @@ ipcMain.handle('cover:set', (_e, bookId, srcPath) => {
 });
 
 ipcMain.handle('cover:remove', (_e, bookId) => {
-  const dir = bookDir(bookId);
+  const dir = libraryStore.bookDir(bookId);
   if (fs.existsSync(dir)) clearCovers(dir);
   return true;
 });
@@ -311,7 +219,7 @@ ipcMain.handle('cover:remove', (_e, bookId) => {
 ipcMain.handle('cover:read', (_e, bookId, fname) => {
   try {
     const coverFile = NeoCore.files.cover(fname);
-    const buf = fs.readFileSync(path.join(bookDir(bookId), coverFile));
+    const buf = fs.readFileSync(path.join(libraryStore.bookDir(bookId), coverFile));
     const ext = path.extname(coverFile).slice(1);
     const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
     return { base64: buf.toString('base64'), mime, ext };
@@ -370,7 +278,7 @@ ipcMain.handle('cover:paint', (_e, bookId, text, options) => {
     const provider = (options && options.provider) || 'openai';
     const apiKey = readSecret(provider);
     if (!apiKey) return { error: 'No API key for ' + provider + ' — add one under File → Cover Art…' };
-    const dir = bookDir(bookId);
+    const dir = libraryStore.bookDir(bookId);
     if (!fs.existsSync(dir)) return { error: 'Book folder is missing' };
     try {
       const art = require('./art.js');
@@ -746,7 +654,7 @@ const ERROR_LOG = () => path.join(LIBRARY_DIR, 'neo-errors.log');
 
 function logError(source, err) {
   try {
-    ensureLibrary();
+    libraryStore.ensureLibrary();
     const line = `[${new Date().toISOString()}] [${source}] ${err && err.stack ? err.stack : String(err)}\n`;
     fs.appendFileSync(ERROR_LOG(), line);
   } catch { /* never let logging crash the app */ }
@@ -759,7 +667,7 @@ ipcMain.handle('log:error', (_e, msg) => logError('renderer', msg));
 // One zip of the whole library per day, keeping the last 14. Cheap insurance.
 async function dailyBackup() {
   try {
-    ensureLibrary();
+    libraryStore.ensureLibrary();
     const backupsDir = path.join(LIBRARY_DIR, 'Backups');
     if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
     const today = new Date().toISOString().slice(0, 10);
@@ -881,7 +789,7 @@ async function loadSpellDictionary(code) {
   const entry = SPELL_LANGUAGES[known];
   startSpellProcess();
   let custom = [];
-  try { custom = readJSON(LIBRARY_FILE, {}).customWords || []; } catch { /* a nicety */ }
+  try { custom = libraryStore.readLibrary().customWords || []; } catch { /* a nicety */ }
   const res = await spellRequest({ type: 'load', dir: path.join(__dirname, 'node_modules', entry.pkg), custom });
   if (!res.ok) { logError('spell', new Error(res.error || 'dictionary failed to load')); return false; }
   spellLanguage = known;
@@ -890,7 +798,7 @@ async function loadSpellDictionary(code) {
 
 function initSpell() {
   let code = 'en-US';
-  try { code = readJSON(LIBRARY_FILE, {}).spellLanguage || 'en-US'; } catch { /* fresh library */ }
+  try { code = libraryStore.readLibrary().spellLanguage || 'en-US'; } catch { /* fresh library */ }
   loadSpellDictionary(code);
 }
 
@@ -1238,7 +1146,7 @@ app.whenReady().then(() => {
       // …unless the writer chose their own folder (File → Library Folder…)
       const chosen = readSettings().libraryDir;
       if (chosen && fs.existsSync(chosen) && fs.statSync(chosen).isDirectory()) LIBRARY_DIR = chosen;
-      LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
+      libraryStore.setLibraryDir(LIBRARY_DIR);
     } catch (err) {
       logError('paths', err);
     }
@@ -1259,7 +1167,7 @@ app.whenReady().then(() => {
       }
     }
 
-    try { ensureLibrary(); } catch (err) { logError('library', err); }
+    try { libraryStore.ensureLibrary(); } catch (err) { logError('library', err); }
     createWindow();
     try { initSpell(); } catch (err) { logError('spell', err); }
     try { buildMenu(); } catch (err) { logError('menu', err); }
