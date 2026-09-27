@@ -52,6 +52,20 @@ button { font: inherit; cursor: pointer; }
 .shelf-header-right { display: flex; gap: 16px; align-items: center; -webkit-app-region: no-drag; }
 #author-chip { color: var(--muted); font-size: 13px; cursor: pointer; }
 #author-chip:hover { color: #ddd; }
+/* the rack of pen-name shelves that unfolds when a book is dragged to the name */
+#pen-rack {
+  position: fixed; z-index: 90; width: 300px; padding: 10px 14px 6px;
+  background: var(--pane, #202020); border: 1px solid #3a3a3a; border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  opacity: 0; transform: translateY(-6px); transition: opacity 0.15s ease, transform 0.15s ease;
+}
+#pen-rack.open { opacity: 1; transform: translateY(0); }
+.pen-slot {
+  padding: 16px 8px 8px; margin-bottom: 4px; color: var(--muted); font-size: 14px; letter-spacing: 1px;
+  text-align: left;
+  border-bottom: 4px solid #2e2a24; border-radius: 2px; transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+.pen-slot.over { color: #ddd; border-bottom-color: var(--accent); background: rgba(255,255,255,0.04); }
 #add-shelf-btn {
   background: none; border: 1px solid #3a3a3a; color: var(--muted);
   border-radius: 6px; padding: 5px 12px; font-size: 12px;
@@ -407,6 +421,16 @@ body.night #aux-editor * { color: inherit; }
 }
 /* typewriter scrolling: room below the last line so it can sit mid-screen */
 body.typewriter #paper { margin-bottom: 60vh; }
+/* focus mode: the manuscript fades back, the neo-focus highlight (set in
+   app.js) repaints the current sentence / paragraph / scene at full ink */
+.chapter-body, .chapter-head { transition: color 0.25s ease; }
+body.focus-mode .chapter-body,
+body.focus-mode .chapter-head { color: color-mix(in srgb, var(--ink) 28%, var(--paper)); }
+::highlight(neo-focus) { color: #1c1c1c; }
+body.night ::highlight(neo-focus) { color: #d6d2c6; }
+/* the drop cap sits outside the highlight's reach; same selector as the cap
+   itself so no other paragraph grows a ::first-letter */
+body.focus-mode .chapter-body.focus-cap:not(.cap-off) p:not(.poetry):not(p:not(.poetry) ~ p)::first-letter { color: var(--ink); }
 .sheet {
   background: var(--paper); color: var(--ink);
   padding: 70px 72px 90px;
@@ -446,7 +470,7 @@ body.typewriter #paper { margin-bottom: 60vh; }
 
 /* --- Chapters: each starts on a fresh sheet --- */
 .chapter-head {
-  text-align: center; font-family: Georgia, serif;
+  text-align: center; font-family: var(--body-font);
   font-size: calc(15px * var(--page-zoom, 1)); letter-spacing: 4px; text-transform: uppercase;
   color: #555; margin-bottom: 44px;
   user-select: none;
@@ -536,12 +560,12 @@ body.bright .spell-menu button { color: #eee; }
 
 /* --- Aux paper (Notes / Outline / Darlings) --- */
 #aux-paper h2 {
-  font-family: Georgia, serif; font-weight: 400; letter-spacing: 3px;
+  font-family: var(--body-font); font-weight: 400; letter-spacing: 3px;
   text-transform: uppercase; font-size: 14px; color: #777;
   text-align: center; margin-bottom: 40px;
 }
 #aux-editor {
-  font-family: Georgia, serif; font-size: calc(var(--editor-size, 16px) * var(--page-zoom, 1)); line-height: 1.7; outline: none;
+  font-family: var(--body-font); font-size: calc(var(--editor-size, 16px) * var(--page-zoom, 1)); line-height: 1.7; outline: none;
   min-height: 50vh;
 }
 #aux-editor:empty::before { content: 'Write freely…'; color: #b9b4a8; font-style: italic; }
@@ -554,12 +578,12 @@ body.bright .spell-menu button { color: #eee; }
 .ol-chapter { margin-top: 18px; }
 .ol-section { margin-left: 40px; }
 .ol-num {
-  font-family: Georgia, serif; color: #8d8778; min-width: 24px; text-align: right;
+  font-family: var(--body-font); color: #8d8778; min-width: 24px; text-align: right;
   user-select: none; flex-shrink: 0;
 }
 .ol-chapter .ol-num { font-weight: 700; color: #6b6455; }
 .ol-text {
-  flex: 1; outline: none; font-family: Georgia, serif;
+  flex: 1; outline: none; font-family: var(--body-font);
   line-height: 1.5; min-height: 20px; border-bottom: 1px dashed transparent;
 }
 .ol-text:focus { border-bottom-color: #d8d2c2; }
