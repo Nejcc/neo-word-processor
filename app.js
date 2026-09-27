@@ -2886,18 +2886,34 @@ function outlineLine(kind, chId, secId, index, label, text) {
     renderNav();
   });
 
+  // Enter at the very start of a line that has text makes the new line
+  // ABOVE it (the only way to put something before "A"); anywhere else,
+  // below — the way a text editor's outline behaves
+  const caretAtStart = () => {
+    if (!txt.textContent.trim()) return false;
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed) return false;
+    const r = sel.getRangeAt(0);
+    if (!txt.contains(r.startContainer)) return false;
+    const head = document.createRange();
+    head.selectNodeContents(txt);
+    head.setEnd(r.startContainer, r.startOffset);
+    return head.toString().length === 0;
+  };
+
   txt.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      const above = caretAtStart();
       save();
       if (kind === 'chapter') {
-        const at = book.chapterOrder.indexOf(chId) + 1;
+        const at = book.chapterOrder.indexOf(chId) + (above ? 0 : 1);
         const newId = createChapterAt(at);
         renderOutline({ chId: newId });
       } else {
         const list = book.sectionNotes[chId];
         const newSec = { id: Core.id.section(), text: '' };
-        list.splice(index + 1, 0, newSec);
+        list.splice(index + (above ? 0 : 1), 0, newSec);
         scheduleMetaSave();
         syncGhosts(chId);
         renderOutline({ secId: newSec.id });
@@ -4343,7 +4359,13 @@ function openStats() {
     if (hasBook) updateCounters();
   };
   bd.querySelector('.m-ok').onclick = close;
+  // Esc closes from anywhere in the dialog (it takes focus on opening, so
+  // the key reaches it even before a field is clicked); so does a click on
+  // the dim page around it. Both keep the edits, like Done.
+  bd.tabIndex = -1;
+  bd.focus();
   bd.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  bd.addEventListener('mousedown', (e) => { if (e.target === bd) close(); });
   if (hasBook) {
     bd.querySelector('#st-sprint-btn').onclick = () => {
       if (sprint && !sprint.done) {

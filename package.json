@@ -1,7 +1,7 @@
 {
   "name": "neo",
   "productName": "NEO",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "A word processor for authors. Distraction-free by default.",
   "homepage": "https://github.com/hughhowey/neo",
   "main": "main.js",
@@ -11,8 +11,7 @@
     "package": "electron-builder --mac",
     "package:win": "electron-builder --win",
     "package:linux": "electron-builder --linux",
-    "package:all": "electron-builder --mac --win --linux",
-    "linux": "scripts/run-linux-appimage.sh"
+    "package:all": "electron-builder --mac --win --linux"
   },
   "build": {
     "appId": "com.hughhowey.neo",
