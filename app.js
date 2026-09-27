@@ -2,6 +2,8 @@
 
 'use strict';
 
+const Core = window.NeoCore;
+
 // ---------- state ----------
 let library = null;          // library.json
 let book = null;             // current book.json
@@ -797,7 +799,7 @@ function shelfAutoScrollStep() {
 
 $('#add-shelf-btn').onclick = async () => {
   library.shelves.push({
-    id: 'shelf-' + Date.now().toString(36),
+    id: Core.id.shelf(),
     name: 'New Shelf',
     bookIds: [],
     authorId: currentAuthor().id
@@ -835,12 +837,12 @@ $('#author-chip').onclick = async () => {
   } else if (pick === 'add') {
     const name = await askInput('New pen name', 'Shown on that name’s title pages', '');
     if (!name) return;
-    const a = { id: 'a-' + Date.now().toString(36), name };
+    const a = { id: Core.id.author(), name };
     library.authors.push(a);
     library.currentAuthorId = a.id;
     library.shelves.push({
-      id: 'shelf-' + Date.now().toString(36),
-      name: 'Works in Progress', bookIds: [], authorId: a.id
+      id: Core.id.shelf(),
+      name: Core.DEFAULT_SHELF_NAME, bookIds: [], authorId: a.id
     });
   } else if (pick === 'del') {
     const homeId = library.authors[0].id;
@@ -1006,7 +1008,7 @@ async function deleteChapterToDarlings(chId) {
   if (text) {
     const bodyEl = document.querySelector(`.chapter[data-id="${chId}"] .chapter-body`);
     darlings.push({
-      id: 'd-' + Date.now().toString(36),
+      id: Core.id.darling(),
       html: bodyEl ? bodyEl.innerHTML : chapterHTML[chId],
       text: text.slice(0, 2000),
       chapterId: null,
@@ -1991,7 +1993,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 function createChapterAt(idx) {
-  const chId = 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+  const chId = Core.id.chapter();
   book.chapterOrder.splice(idx, 0, chId);
   chapterHTML[chId] = '<p><br></p>';
   window.neo.writeChapter(book.id, chId, chapterHTML[chId]);
@@ -2053,7 +2055,7 @@ function insertPlaceholder() {
     return;
   }
   currentChapterId = bodyEl.closest('.chapter').dataset.id;
-  const sid = 's-' + Date.now().toString(36);
+  const sid = Core.id.sticky();
   const span = document.createElement('span');
   span.className = 'ph-mark';
   span.dataset.sid = sid;
@@ -2128,7 +2130,7 @@ function reconcileMarks() {
     const chId = chEl ? chEl.dataset.id : null;
     const existing = stickies.find((s) => s.id === sid);
     if (seen.has(sid)) {
-      const nid = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5);
+      const nid = Core.id.sticky();
       m.dataset.sid = nid;
       stickies.push({ id: nid, chapterId: chId, text: existing ? existing.text : '', resolved: false });
       seen.add(nid);
@@ -2470,7 +2472,7 @@ async function moveSelectionToDarlings(html, text) {
     : null;
   const chId = srcChapter ? srcChapter.dataset.id : currentChapterId;
   const chIdx = book.chapterOrder.indexOf(chId);
-  const did = 'd-' + Date.now().toString(36);
+  const did = Core.id.darling();
 
   snapshotStructure('darling');
 
@@ -2730,7 +2732,7 @@ function outlineLine(kind, chId, secId, index, label, text) {
         renderOutline({ chId: newId });
       } else {
         const list = book.sectionNotes[chId];
-        const newSec = { id: 'sec-' + Date.now().toString(36), text: '' };
+        const newSec = { id: Core.id.section(), text: '' };
         list.splice(index + 1, 0, newSec);
         scheduleMetaSave();
         syncGhosts(chId);
@@ -2762,7 +2764,7 @@ function outlineLine(kind, chId, secId, index, label, text) {
       save();
       const prevCh = book.chapterOrder[pos - 1];
       book.sectionNotes[prevCh] = book.sectionNotes[prevCh] || [];
-      const newSec = { id: 'sec-' + Date.now().toString(36), text: txt.textContent.trim() };
+      const newSec = { id: Core.id.section(), text: txt.textContent.trim() };
       book.sectionNotes[prevCh].push(newSec);
       deleteChapterQuiet(chId).then(() => {
         syncGhosts(prevCh);
@@ -3562,7 +3564,7 @@ async function addImportedBooks(results, shelf) {
     let words = 0;
     meta.chapterTitles = {};
     for (const ch of r.chapters) {
-      const chId = 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+      const chId = Core.id.chapter();
       const html = ch.paras.map((p) => {
         if (p.scene) return '<p class="scene-break">***</p>';
         let text = escHtml(p.text || '');

@@ -73,6 +73,31 @@
 
   const bookDir = (bookId) => p(bookId);
 
+  function assertValid(label, value, validator) {
+    if (!validator(value)) throw new Error('Invalid ' + label);
+    return value;
+  }
+
+  function checkedBookDir(bookId) {
+    assertValid('bookId', bookId, NeoCore.validators.bookId);
+    return bookDir(bookId);
+  }
+
+  function chapterPath(bookId, chId) {
+    assertValid('chapterId', chId, NeoCore.validators.chapterId);
+    return p(assertValid('bookId', bookId, NeoCore.validators.bookId), 'chapters', chId + '.html');
+  }
+
+  function auxPath(bookId, name) {
+    assertValid('aux name', name, NeoCore.validators.auxName);
+    return p(assertValid('bookId', bookId, NeoCore.validators.bookId), name + '.html');
+  }
+
+  function jsonPath(bookId, name) {
+    assertValid('JSON sidecar', name, NeoCore.validators.jsonSidecar);
+    return p(assertValid('bookId', bookId, NeoCore.validators.bookId), name + '.json');
+  }
+
   // The honest access test: reading a file another app created. An app can
   // always touch its OWN files without the big permission — which is exactly
   // how a too-gentle test lies about a half-broken setup.
@@ -97,18 +122,11 @@
     }
   }
 
-  function slugify(s) {
-    return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  }
-
   window.neo = {
     /* ---------- library ---------- */
     readLibrary: async () => {
-      if (!(await checkAccess())) return { authorName: '', penNames: [], firstRunDone: false, shelves: [{ id: 'shelf-1', name: 'Works in Progress', bookIds: [] }] };
-      return readJSONFile(p('library.json'), {
-        authorName: '', penNames: [], firstRunDone: false, pageTheme: 'night',
-        shelves: [{ id: 'shelf-1', name: 'Works in Progress', bookIds: [] }]
-      });
+      if (!(await checkAccess())) return NeoCore.defaultLibrary();
+      return readJSONFile(p('library.json'), NeoCore.defaultLibrary());
     },
     writeLibrary: async (data) => { await writeJSONFile(p('library.json'), data); return true; },
     libraryPath: async () => {
@@ -120,57 +138,47 @@
     },
 
     /* ---------- books ---------- */
-    readBookMeta: (bookId) => readJSONFile(p(bookId, 'book.json'), null),
+    readBookMeta: (bookId) => readJSONFile(p(assertValid('bookId', bookId, NeoCore.validators.bookId), 'book.json'), null),
     writeBookMeta: async (bookId, meta) => {
+      assertValid('bookId', bookId, NeoCore.validators.bookId);
+      if (!meta || meta.id !== bookId) throw new Error('Book metadata id mismatch');
       meta.modified = new Date().toISOString();
       await writeJSONFile(p(bookId, 'book.json'), meta);
       return true;
     },
     createBook: async (opts) => {
-      const seed = (opts && opts.title) ? slugify(opts.title) : '';
-      const id = 'book-' + (seed ? seed + '-' : '') + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
-      const book = {
-        id,
-        title: (opts && opts.title) || 'Untitled',
-        subtitle: '',
-        author: (opts && opts.author) || '',
-        created: new Date().toISOString(),
-        modified: new Date().toISOString(),
-        chapterOrder: [],
-        coverSeed: Math.floor(Math.random() * 100000),
-        lastPosition: null
-      };
-      await ensureDir(bookDir(id) + '/chapters');
-      await writeJSONFile(p(id, 'book.json'), book);
-      await writeText(p(id, 'notes.html'), '');
-      await writeText(p(id, 'outline.html'), '');
-      await writeJSONFile(p(id, 'darlings.json'), []);
-      await writeJSONFile(p(id, 'stickies.json'), []);
+      const book = NeoCore.defaultBook({ ...(opts || {}), id: undefined });
+      await ensureDir(bookDir(book.id) + '/chapters');
+      await writeJSONFile(p(book.id, 'book.json'), book);
+      await writeText(p(book.id, 'notes.html'), '');
+      await writeText(p(book.id, 'outline.html'), '');
+      await writeJSONFile(p(book.id, 'darlings.json'), []);
+      await writeJSONFile(p(book.id, 'stickies.json'), []);
       return book;
     },
     deleteBook: async () => false, // manage the shelves from your Mac
 
     /* ---------- chapters ---------- */
     readChapter: async (bookId, chId) => {
-      try { return await readText(p(bookId, 'chapters', chId + '.html')); } catch { return ''; }
+      try { return await readText(chapterPath(bookId, chId)); } catch { return ''; }
     },
     writeChapter: async (bookId, chId, html) => {
-      await ensureDir(bookDir(bookId) + '/chapters');
-      await writeText(p(bookId, 'chapters', chId + '.html'), html);
+      await ensureDir(checkedBookDir(bookId) + '/chapters');
+      await writeText(chapterPath(bookId, chId), html);
       return true;
     },
     deleteChapter: async (bookId, chId) => {
-      try { await FS().deleteFile({ path: p(bookId, 'chapters', chId + '.html'), directory: DIR }); } catch { /* fine */ }
+      try { await FS().deleteFile({ path: chapterPath(bookId, chId), directory: DIR }); } catch { /* fine */ }
       return true;
     },
 
     /* ---------- notes / outline / json sidecars ---------- */
     readAux: async (bookId, name) => {
-      try { return await readText(p(bookId, name + '.html')); } catch { return ''; }
+      try { return await readText(auxPath(bookId, name)); } catch { return ''; }
     },
-    writeAux: async (bookId, name, html) => { await writeText(p(bookId, name + '.html'), html); return true; },
-    readJSON: (bookId, name, fallback) => readJSONFile(p(bookId, name + '.json'), fallback),
-    writeJSON: async (bookId, name, data) => { await writeJSONFile(p(bookId, name + '.json'), data); return true; },
+    writeAux: async (bookId, name, html) => { await writeText(auxPath(bookId, name), html); return true; },
+    readJSON: (bookId, name, fallback) => readJSONFile(jsonPath(bookId, name), fallback),
+    writeJSON: async (bookId, name, data) => { await writeJSONFile(jsonPath(bookId, name), data); return true; },
 
     /* ---------- API keys & painting: desktop only ---------- */
     hasSecret: async () => false,
@@ -180,7 +188,8 @@
     /* ---------- covers: shown if present, managed on the Mac ---------- */
     readCover: async (bookId, fname) => {
       try {
-        const r = await FS().readFile({ path: p(bookId, fname), directory: DIR });
+        if (!NeoCore.validators.coverFile(fname)) return null;
+        const r = await FS().readFile({ path: p(assertValid('bookId', bookId, NeoCore.validators.bookId), fname), directory: DIR });
         const ext = fname.split('.').pop().toLowerCase();
         const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
         return { base64: r.data, mime, ext };
