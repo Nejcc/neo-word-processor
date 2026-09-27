@@ -74,7 +74,9 @@ npm install
 npm start
 ```
 
-To build installers: `npm install electron-builder --save-dev`, then `npm run package` (macOS), `npm run package:win` (Windows), or `npm run package:all`. Output lands in `dist/`.
+To build installers: `npm install electron-builder --save-dev`, then `npm run package` (macOS), `npm run package:win` (Windows), `npm run package:linux` (Linux), or `npm run package:all`. Output lands in `dist/`.
+
+On Linux, run the built AppImage with `npm run linux`. The helper detects your CPU architecture, checks for the AppImage FUSE dependency (`libfuse.so.2`), offers to install the matching package for common distros, and falls back to extracting the AppImage if FUSE is not available. Use `npm run linux -- --install-deps` to install the dependency without prompting, or `npm run linux -- --extract` to force the extracted fallback.
 
 The app is very simple: an Electron shell (`main.js`), a preload bridge (`preload.js`), and a renderer (`app.js` + `styles.css` + `index.html`). If you know JavaScript, you can change NEO. Have at it.
 
