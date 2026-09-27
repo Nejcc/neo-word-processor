@@ -10,7 +10,8 @@
     "package": "electron-builder --mac",
     "package:win": "electron-builder --win",
     "package:linux": "electron-builder --linux",
-    "package:all": "electron-builder --mac --win --linux"
+    "package:all": "electron-builder --mac --win --linux",
+    "linux": "scripts/run-linux-appimage.sh"
   },
   "build": {
     "appId": "com.hughhowey.neo",
