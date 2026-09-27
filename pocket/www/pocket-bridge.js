@@ -73,6 +73,8 @@
 
   const bookDir = (bookId) => p(bookId);
 
+  // Pocket writes the same library files as desktop, so path validation
+  // mirrors main.js before any caller-provided ID becomes part of a filename.
   function assertValid(label, value, validator) {
     if (!validator(value)) throw new Error('Invalid ' + label);
     return value;

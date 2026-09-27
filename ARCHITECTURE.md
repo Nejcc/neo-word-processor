@@ -47,6 +47,53 @@ Good first modules and next extractions:
 - `src/renderer/editor/`: chapter rendering, typing behavior, structural undo, selection helpers.
 - `src/renderer/export/`: TXT, Markdown, HTML, DOCX, EPUB builders.
 
+## Target File Structure
+
+Move toward a structure that separates runtime concerns first, then feature concerns. The goal is to make ownership obvious without hiding the app behind a framework.
+
+```text
+src/
+  shared/
+    schema.js          # defaults, migrations, validators
+    ids.js             # readable ID generation and slugging
+    contracts.js       # window.neo capability names and payload shapes
+  main/
+    library-store.js   # filesystem reads/writes, backups, catalog
+    importer.js        # DOCX/TXT/Markdown import parsing
+    exporter.js        # file export orchestration
+    ipc.js             # validate IPC payloads, call main services
+    menu.js            # app menu and command wiring
+  renderer/
+    app-state.js       # library/book/session state
+    bookshelf/
+    editor/
+    outline/
+    export/
+    ui/
+  pocket/
+    bridge.js          # Capacitor implementation of the same contracts
+  plugins/
+    registry.js        # optional capability discovery and registration
+```
+
+This can happen gradually. `neo-core.js` is a good first shared seam; it can stay at the project root until there is enough shared code to justify the `src/` move.
+
+## Plugin Direction
+
+Plugins should come after the main boundaries are clearer. A plugin system is useful only if the app already has stable contracts for what can be extended.
+
+Good plugin candidates:
+
+- importers: extra source formats or cleanup rules.
+- exporters: extra output formats.
+- cover providers: local image generation, remote image generation, or templates.
+- editor tools: commands that transform selected text or chapters.
+- metadata helpers: series, goals, publishing fields, or catalog enrichments.
+
+Keep early plugins capability-based rather than fully privileged. A plugin should receive a small API, such as `readBook`, `writeChapter`, `registerExporter`, or `registerCommand`, instead of direct filesystem or DOM access. That keeps writer data safer and makes Pocket compatibility easier to reason about.
+
+Avoid a plugin marketplace or dynamic remote loading until local modules, validation, and tests are stronger. Start with built-in plugins or local folders that are loaded explicitly.
+
 ## Strict Boundaries
 
 The renderer should not know filesystem paths beyond what it needs to display a cover URL. It should call capability methods on `window.neo`.

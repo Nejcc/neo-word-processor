@@ -1,5 +1,6 @@
-/* Shared NEO domain defaults and ID helpers.
-   Loads in Electron main via require(), and in the renderer/Pocket as window.NeoCore. */
+/* Shared NEO domain defaults, ID helpers, and validators.
+   Keep this dependency-free: it loads in Electron main via require(),
+   and in the desktop renderer/Pocket webviews as window.NeoCore. */
 (function (root, factory) {
   const core = factory();
   if (typeof module === 'object' && module.exports) module.exports = core;
@@ -68,6 +69,8 @@
     };
   }
 
+  // Disk-facing code in desktop and Pocket uses these same narrow checks
+  // before building paths, so both runtimes reject path-shaped input alike.
   const validators = Object.freeze({
     bookId: (value) => /^book-[a-z0-9][a-z0-9-]*$/i.test(String(value || '')),
     chapterId: (value) => /^ch-[a-z0-9]+(?:-[a-z0-9]+)?$/i.test(String(value || '')),

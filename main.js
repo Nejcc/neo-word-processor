@@ -80,6 +80,8 @@ function bookDir(bookId) {
   return path.join(LIBRARY_DIR, bookId);
 }
 
+// Validate renderer-supplied identifiers before composing filesystem paths.
+// The allowlists live in NeoCore so desktop and Pocket enforce one contract.
 function requireValid(label, value, validator) {
   if (!validator(value)) throw new Error('Invalid ' + label);
   return value;
