@@ -11,6 +11,13 @@
       "insetsHandling": "native",
       "style": "DARK",
       "hidden": true
+    },
+    "Keyboard": {
+      "resize": "none"
     }
+  },
+  "ios": {
+    "contentInset": "never",
+    "allowsLinkPreview": false
   }
 }

@@ -35,6 +35,8 @@ There's a white page by default or a dark mode (which I now prefer!). Controls f
 
 One Enter: new paragraph. Two: a `***` section break. Three: a new chapter. The goal is to KEEP WRITING.
 
+Right-click the first chapter's heading to make it a prologue, or the last one's to make it an epilogue: they step out of the numbering, and everything renumbers.
+
 **Darlings** 
 
 The writing advice is "kill your darlings" — but I say: *keep the bodies*. Drag any beautiful-but-in-the-way passage onto the Darlings tab. It leaves your manuscript but isn't lost. Darlings restore to the exact spot it came from. More like zombies than darlings.
@@ -55,9 +57,13 @@ Every book gets a cover! New books are dressed in a seeded abstract (six art sty
 
 Daily word goals, word sprints, and a NaNoWriMo-style progress chart. Needs more testing, but I think it works okay!
 
+**A shelf can become one book** 
+
+Right-click a shelf's name and choose **Bind into one book** for an omnibus, a trilogy, or a story collection. Hover over the bound shelf and the pages a published book carries show up faintly in their places: copyright, dedication, epigraph, prologue, epilogue, acknowledgments, about the author. A small + before each title starts a Part. Click a page and type it the way it will print; a prologue or epilogue opens in the editor like any story. The export is one EPUB, Word file, or PDF with a single cover and one table of contents, and chapters can number straight through the whole book. Unbind any time. Nothing is lost.
+
 **Exports** 
 
-EPUB 3 with a proper table of contents built to KDP's guidelines, Word .docx, PDF, HTML, markdown, and plain text. Email a timestamped PDF snapshot to yourself with a SHA-256 fingerprint of the text in the body. Might come in handy someday.
+EPUB 3 with a proper table of contents built to KDP's guidelines, Word .docx, PDF with page numbers and bookmarks, HTML, markdown, and plain text. Email a timestamped PDF snapshot to yourself with a SHA-256 fingerprint of the text in the body. Might come in handy someday.
 
 **Import** 
 
@@ -71,6 +77,10 @@ Continuous autosave, daily zip backups kept for two weeks, everything stored as 
 
 Everything lives in `~/Documents/NEO Library` — one folder per book, chapters as readable HTML, metadata as JSON. Open them in your favorite text editor.
 
+## Languages
+
+NEO speaks English, French, Spanish, Portuguese, German, Italian, Dutch, Polish, Romanian and Russian. Pick one under **View → Language**; on first launch NEO follows your system language when it has it. Adding a language is a single file, no programming needed: see [TRANSLATING.md](TRANSLATING.md).
+
 ## Building from source (for the eggheads):
 
 Requires [Node.js](https://nodejs.org).
@@ -81,6 +91,8 @@ cd neo
 npm install
 npm start
 ```
+
+**View → Keyboard Shortcuts…** opens the shortcut reference. You can also press `Cmd+/` on macOS or `Ctrl+/` on Windows and Linux, or use **Help → NEO Shortcuts**.
 
 To build installers: `npm install electron-builder --save-dev`, then `npm run package` (macOS), `npm run package:win` (Windows), `npm run package:linux` (Linux), or `npm run package:all`. Output lands in `dist/`.
 

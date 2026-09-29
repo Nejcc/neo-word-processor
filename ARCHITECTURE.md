@@ -107,7 +107,7 @@ The main process should validate every IPC payload before touching disk:
 
 The Pocket bridge should implement the same contract as `preload.js`; if a capability is missing on Pocket, the behavior should be deliberate and documented.
 
-Current enforcement lives in `neo-core.js` validators and is used by the desktop main process and Pocket bridge for book IDs, chapter IDs, aux HTML names, JSON sidecars, and cover filenames. New disk-facing IPC handlers should use those validators before building paths.
+Current enforcement is `NeoCore.libName` in `neo-core.js`: every book, chapter, notes/outline and sidecar name must be one plain name (no `.`, `..` or path separators). The desktop main process uses it for every renderer-supplied name, and the Pocket bridge applies it to every path segment. It is deliberately tolerant — any name NEO ever made passes, and so does a folder named by hand. New disk-facing handlers should run caller-supplied names through it before building paths.
 
 ## Duplication To Retire
 

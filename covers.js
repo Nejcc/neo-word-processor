@@ -294,12 +294,29 @@ const NeoCovers = (() => {
     { id: 'oswald', family: 'NEO Oswald',   weight: 700, caps: true,  anchor: 'top',    lead: 0.95, max: 40, minLines: 1, maxLines: 4, connectors: 'small', rule: true }
   ];
 
-  const CONNECTORS = new Set(['the', 'of', 'a', 'an', 'and', 'in', 'on', 'to', 'for', 'at', 'by', 'from', 'or', 'with', 'is', 'are', 'my', 'your', 'our', 'his', 'her', 'its']);
+  // a word's lookup form: lowercase letters, accents stripped (é → e, ё → е)
+  const connKey = (w) => w.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}]/gu, '');
+  const CONNECTORS = new Set(['the', 'of', 'a', 'an', 'and', 'in', 'on', 'to', 'for', 'at', 'by', 'from', 'or', 'with', 'is', 'are', 'my', 'your', 'our', 'his', 'her', 'its',
+    // small words of the other languages NEO speaks, so their titles set as
+    // gracefully as English ones (accents are stripped before the lookup)
+    'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'au', 'aux', 'sur', 'pour', 'par', 'dans', 'ou', 'avec', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses', // fr
+    'el', 'los', 'las', 'del', 'y', 'una', 'con', 'por', 'sin', 'mi', 'tu', 'su', // es
+    'o', 'os', 'as', 'do', 'da', 'dos', 'das', 'e', 'em', 'um', 'uma', 'no', 'na', // pt
+    'der', 'die', 'das', 'und', 'von', 'im', 'ein', 'eine', 'des', 'dem', 'den', 'mit', 'zum', 'zur', // de
+    'il', 'lo', 'i', 'gli', 'di', 'della', 'dei', 'nel', 'nella', 'per', // it
+    'het', 'een', 'van', 'op', 'met', // nl
+    'w', 'z', 'na', 'do', 'ze', 'we', // pl
+    'si', 'in', 'din', 'cu', 'pe', 'pentru', 'un', 'o', 'al', 'ale', 'la', 'de', 'sau', 'spre', 'sub', 'intre', 'fara', // ro ('ai' left out: "When AI Dreams")
+    'и', 'а', 'но', 'или', 'в', 'во', 'на', 'о', 'об', 'с', 'со', 'к', 'по', 'из', 'за', 'от', 'до', 'для', 'без', 'под', 'над', 'про', 'у', 'мой', 'моя', 'моё', 'мои', 'его', 'её', 'их' // ru
+  ].map(connKey));
 
-  // fonts must be in before anything is measured
+  // fonts must be in before anything is measured. A face only loads for the
+  // letters it covers, so the sample text names a Latin and a Cyrillic one:
+  // a Russian title measured before its face arrived would not fill the line.
+  const SAMPLE = 'Aя';
   const ready = (typeof document !== 'undefined' && document.fonts)
-    ? Promise.all(TEMPLATES.map((t) => document.fonts.load(`${t.weight} 20px "${t.family}"`)))
-        .then(() => document.fonts.load('italic 900 20px "NEO Playfair"'))
+    ? Promise.all(TEMPLATES.map((t) => document.fonts.load(`${t.weight} 20px "${t.family}"`, SAMPLE)))
+        .then(() => document.fonts.load('italic 900 20px "NEO Playfair"', SAMPLE))
         .catch(() => null)
     : Promise.resolve();
 
@@ -314,8 +331,8 @@ const NeoCovers = (() => {
   // are balanced into the template's maximum number of lines by character count.
   function breakLines(title, t) {
     const words = title.trim().split(/\s+/).filter(Boolean);
-    if (!words.length) return [{ text: 'Untitled', small: false }];
-    const isConn = (w) => CONNECTORS.has(w.toLowerCase().replace(/[^a-z]/g, ''));
+    if (!words.length) return [{ text: (typeof NeoI18n !== 'undefined' ? NeoI18n.t('Untitled') : 'Untitled'), small: false }];
+    const isConn = (w) => CONNECTORS.has(connKey(w));
     let lines;
     if (words.length <= t.maxLines) {
       lines = words.map((w) => ({ text: w, small: isConn(w) && t.connectors !== 'inline' && words.length > 1 }));
