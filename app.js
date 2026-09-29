@@ -2,7 +2,6 @@
 
 'use strict';
 
-const Core = window.NeoCore;
 // ---------- interface language (see i18n.js and locales/) ----------
 // The English text is the key: t('Cancel') shows the translation when the
 // chosen language has one, and the English original otherwise.
@@ -835,7 +834,7 @@ async function createPageBook(shelf, kind) {
     meta.coverSeed = 'bound:' + shelf.id;
     meta.chapterOrder = [];
   } else {
-    const chId = Core.id.chapter();
+    const chId = 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     await window.neo.writeChapter(meta.id, chId, PAGE_STARTERS[kind] ? PAGE_STARTERS[kind](shelf) : '<p><br></p>');
     meta.chapterOrder = [chId];
   }
@@ -1177,7 +1176,7 @@ async function openPageSheet(shelf, meta, label) {
   const live = (await window.neo.readBookMeta(meta.id)) || meta;
   let chId = (live.chapterOrder || [])[0];
   if (!chId) {
-    chId = Core.id.chapter();
+    chId = 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     live.chapterOrder = [chId];
     await writeBookMeta(live.id, live);
   }
@@ -1737,7 +1736,7 @@ function shelfAutoScrollStep() {
 
 $('#add-shelf-btn').onclick = async () => {
   library.shelves.push({
-    id: Core.id.shelf(),
+    id: 'shelf-' + Date.now().toString(36),
     name: t('New Shelf'),
     bookIds: [],
     authorId: currentAuthor().id
@@ -1921,11 +1920,11 @@ $('#author-chip').onclick = async () => {
   } else if (pick === 'add') {
     const name = await askInput(t('New pen name'), t('Shown on that name’s title pages'), '');
     if (!name) return;
-    const a = { id: Core.id.author(), name };
+    const a = { id: 'a-' + Date.now().toString(36), name };
     library.authors.push(a);
     library.currentAuthorId = a.id;
     library.shelves.push({
-      id: Core.id.shelf(),
+      id: 'shelf-' + Date.now().toString(36),
       name: t('Works in Progress'), bookIds: [], authorId: a.id
     });
   } else if (pick === 'del') {
@@ -2106,7 +2105,7 @@ async function deleteChapterToDarlings(chId) {
   if (text) {
     const bodyEl = document.querySelector(`.chapter[data-id="${chId}"] .chapter-body`);
     darlings.push({
-      id: Core.id.darling(),
+      id: 'd-' + Date.now().toString(36),
       html: bodyEl ? bodyEl.innerHTML : chapterHTML[chId],
       text: text.slice(0, 2000),
       chapterId: null,
@@ -3212,7 +3211,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 function createChapterAt(idx) {
-  const chId = Core.id.chapter();
+  const chId = 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
   book.chapterOrder.splice(idx, 0, chId);
   chapterHTML[chId] = '<p><br></p>';
   persistChapter(chId);
@@ -3277,7 +3276,7 @@ function insertPlaceholder() {
     return;
   }
   currentChapterId = bodyEl.closest('.chapter').dataset.id;
-  const sid = Core.id.sticky();
+  const sid = 's-' + Date.now().toString(36);
   const span = document.createElement('span');
   span.className = 'ph-mark';
   span.dataset.sid = sid;
@@ -3406,7 +3405,7 @@ function reconcileMarks() {
     const chId = chEl ? chEl.dataset.id : null;
     const existing = stickies.find((s) => s.id === sid);
     if (seen.has(sid)) {
-      const nid = Core.id.sticky();
+      const nid = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5);
       m.dataset.sid = nid;
       stickies.push({ id: nid, chapterId: chId, text: existing ? existing.text : '', resolved: false });
       seen.add(nid);
@@ -3796,7 +3795,7 @@ async function moveSelectionToDarlings(html, text) {
     : null;
   const chId = srcChapter ? srcChapter.dataset.id : currentChapterId;
   const chIdx = book.chapterOrder.indexOf(chId);
-  const did = Core.id.darling();
+  const did = 'd-' + Date.now().toString(36);
 
   snapshotStructure('darling');
 
@@ -4082,7 +4081,7 @@ function outlineLine(kind, chId, secId, index, label, text) {
         renderOutline({ chId: newId });
       } else {
         const list = book.sectionNotes[chId];
-        const newSec = { id: Core.id.section(), text: '' };
+        const newSec = { id: 'sec-' + Date.now().toString(36), text: '' };
         list.splice(index + (above ? 0 : 1), 0, newSec);
         scheduleMetaSave();
         syncGhosts(chId);
@@ -4114,7 +4113,7 @@ function outlineLine(kind, chId, secId, index, label, text) {
       save();
       const prevCh = book.chapterOrder[pos - 1];
       book.sectionNotes[prevCh] = book.sectionNotes[prevCh] || [];
-      const newSec = { id: Core.id.section(), text: txt.textContent.trim() };
+      const newSec = { id: 'sec-' + Date.now().toString(36), text: txt.textContent.trim() };
       book.sectionNotes[prevCh].push(newSec);
       deleteChapterQuiet(chId).then(() => {
         syncGhosts(prevCh);
@@ -4713,7 +4712,7 @@ async function refreshFromDisk() {
       } else {
         savedHTML[chId] = disk; // what's on disk now; our text goes over it on the next save
         const idx = book.chapterOrder.indexOf(chId);
-        const twinId = Core.id.chapter();
+        const twinId = 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
         book.chapterOrder.splice(idx + 1, 0, twinId);
         book.chapterTitles = book.chapterTitles || {};
         const when = new Date().toLocaleTimeString(NeoI18n.getLocale(), { hour: 'numeric', minute: '2-digit' });
@@ -5185,7 +5184,7 @@ async function addImportedBooks(results, shelf) {
     let words = 0;
     meta.chapterTitles = {};
     for (const ch of r.chapters) {
-      const chId = Core.id.chapter();
+      const chId = 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
       const html = ch.paras.map((p) => {
         if (p.scene) return '<p class="scene-break">***</p>';
         let text = escHtml(p.text || '');

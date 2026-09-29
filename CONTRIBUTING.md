@@ -17,8 +17,6 @@ Good territory: bug fixes, performance, accessibility, better import/export prec
 
 Books are folders of plain files in `~/Documents/NEO Library`: `book.json` for metadata, `chapters/*.html` for text, JSON files for darlings/stickies.
 
-For architectural direction, DRY priorities, and package-manager guidance, see `ARCHITECTURE.md`.
-
 ## Ground rules
 
 1. **Nothing interrupts a writer mid-sentence.** No popups, no squiggles, no notifications while typing.
@@ -29,7 +27,6 @@ For architectural direction, DRY priorities, and package-manager guidance, see `
 ## Practical bits
 
 - Run from source: `npm install && npm start` (needs Node.js).
-- Use npm for now. Do not add Bun unless the Electron build/package flow is deliberately migrated and tested across platforms.
 - Keep PRs focused — one feature or fix each.
 - Describe the writer-facing behavior in your PR, not just the code. Think like an author, not a programmer!
 - Bug reports: please include your OS, what you did, what happened, and the tail of `~/Documents/NEO Library/neo-errors.log` if it's a crash.

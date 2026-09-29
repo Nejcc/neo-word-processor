@@ -1,6 +1,6 @@
-/* Shared NEO rules for desktop and Pocket: library names and IDs.
+/* Shared NEO rules for desktop and Pocket: which library names are allowed.
    Keep this dependency-free: it loads in Electron main via require(),
-   and in the desktop renderer/Pocket webviews as window.NeoCore. */
+   and in the Pocket webview as window.NeoCore. */
 (function (root, factory) {
   const core = factory();
   if (typeof module === 'object' && module.exports) module.exports = core;
@@ -18,19 +18,5 @@
     return name;
   }
 
-  function makeId(prefix, randomLen) {
-    const random = randomLen ? '-' + Math.random().toString(36).slice(2, 2 + randomLen) : '';
-    return prefix + '-' + Date.now().toString(36) + random;
-  }
-
-  const id = Object.freeze({
-    shelf: () => makeId('shelf', 0),
-    author: () => makeId('a', 0),
-    chapter: () => makeId('ch', 4),
-    sticky: () => makeId('s', 4),
-    darling: () => makeId('d', 4),
-    section: () => makeId('sec', 0)
-  });
-
-  return { libName, id };
+  return { libName };
 });
